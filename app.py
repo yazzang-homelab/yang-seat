@@ -212,6 +212,51 @@ def upsert_user(con, uid: str, admin: bool = False, alias: str = "") -> None:
         snapshot(con)
 
 
+def import_users_csv(con, data: bytes) -> dict:
+    """A열 ID, B열 별칭(선택). 헤더 행·빈 행 무시. 파일 내 중복 ID는 마지막 행이 이김.
+    이미 있는 ID는 별칭만 갱신(PW·관리자 유지), 새 ID는 빈 PW로 등록."""
+    import csv
+    import io
+
+    text = data.decode("utf-8-sig", errors="replace")
+    rows = list(csv.reader(io.StringIO(text)))
+    merged: dict[str, str] = {}
+    for i, row in enumerate(rows):
+        if not row:
+            continue
+        uid = row[0].strip()
+        alias = row[1].strip() if len(row) > 1 else ""
+        if not uid:
+            continue
+        if i == 0 and uid.lower() in ("id", "아이디"):
+            continue
+        merged[uid] = alias
+    existing = {u for (u,) in con.execute("SELECT id FROM users")}
+    with _LOCK:
+        for uid, alias in merged.items():
+            con.execute(
+                """INSERT INTO users(id, pw, admin, alias) VALUES(?, '', 0, ?)
+                   ON CONFLICT(id) DO UPDATE SET alias=excluded.alias""",
+                (uid, alias),
+            )
+        snapshot(con)
+    added = [u for u in merged if u not in existing]
+    updated = [u for u in merged if u in existing]
+    return {"added": added, "updated": updated, "rows": len(merged)}
+
+
+def export_users_csv(con) -> bytes:
+    import csv
+    import io
+
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["id", "alias"])
+    for u in list_users(con):
+        w.writerow([u["id"], u["alias"]])
+    return ("\ufeff" + buf.getvalue()).encode("utf-8")  # BOM: 엑셀에서 한글 깨짐 방지
+
+
 def delete_user(con, uid: str) -> None:
     with _LOCK:
         con.execute("DELETE FROM users WHERE id=?", (uid,))
@@ -315,6 +360,23 @@ def admin_page(con, me: dict):
                 st.success(f"{uid} 저장됨")
                 st.rerun()
 
+    st.markdown("#### CSV 일괄 등록 / 내려받기")
+    st.caption("A열 = ID, B열 = 별칭(선택). 첫 줄이 `id`면 헤더로 간주. 이미 있는 ID는 별칭만 바뀌고 PW·관리자 여부는 유지됩니다.")
+    c = st.columns([3, 1])
+    up = c[0].file_uploader("CSV 업로드", type=["csv", "txt"], label_visibility="collapsed")
+    c[1].download_button(
+        "CSV 내려받기", export_users_csv(con), file_name=f"seat-users-{today()}.csv",
+        mime="text/csv", use_container_width=True,
+    )
+    if up is not None and st.session_state.get("csv_done") != up.file_id:
+        res = import_users_csv(con, up.getvalue())
+        st.session_state.csv_done = up.file_id
+        st.success(
+            f"{res['rows']}행 처리 — 신규 {len(res['added'])}명"
+            + (f" ({', '.join(res['added'][:10])}{'…' if len(res['added']) > 10 else ''})" if res["added"] else "")
+            + f", 기존 갱신 {len(res['updated'])}명"
+        )
+
     st.markdown("#### 계정 목록")
     users = list_users(con)
     st.caption(
@@ -377,9 +439,9 @@ def board(con, me, seats, w, h):
     mine = next((s for s, u in taken.items() if u == me), None)
     msg = f"매일 23:59(KST)에 초기화 · 남은 자리 {len(seats)-len(taken)}/{len(seats)} · 10초마다 자동 갱신"
     if mine:
-        st.success(f"오늘 내 자리: **{mine}** — 파란 원을 클릭하면 취소됩니다. ({msg})")
+        st.success(f"오늘 내 자리: **{mine}** — 파란 칸을 클릭하면 취소됩니다. ({msg})")
     else:
-        st.info(f"초록 원을 클릭하면 바로 선점됩니다. ({msg})")
+        st.info(f"색 칸을 클릭하면 바로 선점됩니다. ({msg})")
 
     names = display_names(con)
     clicked = seat_map(
@@ -394,7 +456,7 @@ def board(con, me, seats, w, h):
             cancel(con, me)
             st.rerun()
         elif mine:
-            st.error("이미 다른 자리를 선점했습니다. 내 자리(파란 원)를 클릭해 먼저 취소하세요.")
+            st.error("이미 다른 자리를 선점했습니다. 내 자리(파란 칸)를 클릭해 먼저 취소하세요.")
         else:
             err = reserve(con, seat, me)
             if err:

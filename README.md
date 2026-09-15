@@ -21,7 +21,7 @@ GitHub Actions(`.github/workflows/ci.yml`)는 push마다 pytest만 돈다 — Ac
 | 화면 | 주소 | 설명 |
 |---|---|---|
 | 자리 선점 | `/` | 초록 원 클릭=선점, 파란 원(내 자리) 클릭=취소, 회색=다른 사람 |
-| 관리자 | `/?page=admin` | 초기 계정 `yang / 1234`. 계정 등록(ID·별칭·관리자 여부)·**PW 초기화**·삭제, 오늘 예약 강제 해제 |
+| 관리자 | `/?page=admin` | 초기 계정 `yang / 1234`. 계정 등록(ID·별칭·관리자 여부)·**CSV 일괄 등록/내려받기**(A열 ID, B열 별칭)·**PW 초기화**·삭제, 오늘 예약 강제 해제 |
 
 관리자가 아닌 계정으로 `/?page=admin`에 들어가면 "권한 없음"만 뜬다.
 
@@ -32,9 +32,9 @@ GitHub Actions(`.github/workflows/ci.yml`)는 push마다 pytest만 돈다 — Ac
 | `app.py` | 앱 전체 (로그인·클릭형 좌석 맵·선점/취소·관리자·SQLite) |
 | `store.py` | GitHub Gist 미러 — 계정과 오늘 예약 스냅샷을 저장/복원 |
 | `seatmap/index.html` | 커스텀 컴포넌트 — 도면 위 원을 클릭하면 선점/취소 |
-| `seats.json` | 좌석 32개 좌표 (L=LSS 13, S=SCC 6, C=CSO 13). id/zone 편집 가능 |
+| `seats.json` | 좌석 45개 (3.png 색 박스에서 추출: LSS 13 · SCC 14 · CSO 17 · CGM 1). id/zone 편집 가능 |
 | `users.json` | 최초 시드 계정 (gist가 비어 있을 때 1회만 사용) |
-| `floor.png` | 1.png (0,0)-(560,330) 크롭 + 상단 14px 여백 |
+| `floor.png` | 3.png (40,30)-(880,500) 크롭 |
 
 ## 동작 원리
 

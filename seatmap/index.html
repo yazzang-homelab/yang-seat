@@ -1,6 +1,6 @@
 <!DOCTYPE html><html><head><meta charset="utf-8">
 <style>body{margin:0;padding:0 2px 4px 0;font-family:sans-serif;box-sizing:border-box}svg{width:calc(100% - 2px);height:auto;display:block;border:1px solid #ddd;border-radius:8px;background:#fff}
-.seat{cursor:pointer}.seat:hover circle{stroke-width:2.5}.taken{cursor:not-allowed}
+.seat{cursor:pointer}.seat:hover rect{stroke-width:3}.taken{cursor:not-allowed}
 .legend{font-size:12px;color:#444;margin-top:4px}</style></head><body>
 <div id="root"></div>
 <script>
@@ -9,16 +9,21 @@ function setHeight(){send("streamlit:setFrameHeight",{height:document.body.scrol
 function render(a){
   const {img,w,h,seats,taken,me}=a;
   let g="";
+  const ZONE={LSS:"#22a7e0",SCC:"#7dc855",CSO:"#f2b722",CGM:"#6a3ba8"};
   for(const s of seats){
-    const o=taken[s.id]; let fill,label,cls="seat";
-    if(o===me){fill="#2563eb";label="나"}else if(o){fill="#9ca3af";label=o.length>3?o.slice(0,3)+"…":o;cls="seat taken"}else{fill="#22c55e";label=s.id}
-    g+=`<g class="${cls}" data-id="${s.id}" data-taken="${o?1:0}"><circle cx="${s.x}" cy="${s.y}" r="11" fill="${fill}" stroke="#111" stroke-width="1"/>
-        <text x="${s.x}" y="${s.y+3}" font-size="${/[가-힣]/.test(label)?6:7}" text-anchor="middle" fill="#fff" font-weight="bold">${label}</text>
+    const o=taken[s.id]; let fill,label,cls="seat",txt="#fff";
+    const hw=(s.w||48)/2, hh=(s.h||44)/2;
+    if(o===me){fill="#2563eb";label="내 자리"}
+    else if(o){fill="#9ca3af";label=o.length>4?o.slice(0,4)+"…":o;cls="seat taken"}
+    else{fill=ZONE[s.zone]||"#22c55e";label=s.id;txt=s.zone==="CSO"?"#333":"#fff"}
+    g+=`<g class="${cls}" data-id="${s.id}" data-taken="${o?1:0}">
+        <rect x="${s.x-hw}" y="${s.y-hh}" width="${hw*2}" height="${hh*2}" rx="4" fill="${fill}" stroke="#1f2937" stroke-width="1.5"/>
+        <text x="${s.x}" y="${s.y+4}" font-size="${label.length>4?9:11}" text-anchor="middle" fill="${txt}" font-weight="bold">${label}</text>
         <title>${s.id} · ${s.zone} · ${o||"빈 자리 — 클릭하면 선점"}</title></g>`;
   }
   document.getElementById("root").innerHTML=
    `<svg viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg"><image href="data:image/png;base64,${img}" width="${w}" height="${h}"/>${g}</svg>
-    <div class="legend"><span style="color:#22c55e">●</span> 빈 자리(클릭하면 선점) &nbsp;<span style="color:#9ca3af">●</span> 선점됨 &nbsp;<span style="color:#2563eb">●</span> 내 자리(클릭하면 취소)</div>`;
+    <div class="legend"><span style="color:#22a7e0">■</span><span style="color:#7dc855">■</span><span style="color:#f2b722">■</span><span style="color:#6a3ba8">■</span> 빈 자리(클릭하면 선점) &nbsp;<span style="color:#9ca3af">■</span> 선점됨 &nbsp;<span style="color:#2563eb">■</span> 내 자리(클릭하면 취소)</div>`;
   document.querySelectorAll(".seat").forEach(el=>el.onclick=()=>{
     const id=el.dataset.id, o=taken[id];
     if(o && o!==me) return;

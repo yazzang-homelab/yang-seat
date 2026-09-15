@@ -60,9 +60,18 @@ def test_users_seed_and_admin():
 def test_seats_inside_crop():
     lay = json.loads(pathlib.Path(app.SEATS_PATH).read_text())
     x0, y0, x1, y1 = lay["crop"]
-    assert len(lay["seats"]) == 32 and len({s["id"] for s in lay["seats"]}) == 32
-    for s in lay["seats"]:
-        assert x0 + 11 <= s["x"] <= x1 - 11 and y0 + 11 <= s["y"] <= y1 - 11
+    seats = lay["seats"]
+    assert len(seats) == 45 and len({s["id"] for s in seats}) == 45
+    from collections import Counter
+    assert Counter(s["zone"] for s in seats) == {"LSS": 13, "SCC": 14, "CSO": 17, "CGM": 1}
+    w, h = x1 - x0, y1 - y0
+    for s in seats:
+        assert 24 <= s["x"] <= w - 24 and 22 <= s["y"] <= h - 22
+    # 박스가 서로 겹치지 않는다
+    for a in seats:
+        for b in seats:
+            if a["id"] < b["id"]:
+                assert abs(a["x"] - b["x"]) >= 44 or abs(a["y"] - b["y"]) >= 40, (a["id"], b["id"])
 
 
 def test_migrates_old_users_table():
@@ -78,3 +87,24 @@ def test_migrates_old_users_table():
     assert app.auth(con, "yang", "1234") == {"id": "yang", "admin": True, "name": "yang"}
     app.upsert_user(con, "yang", True, "양")
     assert app.auth(con, "yang", "1234")["name"] == "양"  # PW 유지
+
+
+def test_csv_import_export():
+    con = fresh()
+    app.upsert_user(con, "kim", alias="옛별칭")
+    app.set_pw(con, "kim", "0420")
+    csv = "\ufeffid,alias\nkim,김철수\nlee,이영희\n\npark,\nlee,이영희2\n  \n".encode("utf-8")
+    res = app.import_users_csv(con, csv)
+    assert res["rows"] == 3 and set(res["added"]) == {"lee", "park"} and res["updated"] == ["kim"]
+    assert app.auth(con, "kim", "0420")["name"] == "김철수"       # PW 유지, 별칭 갱신
+    assert app.needs_setup(con, "lee") and app.needs_setup(con, "park")
+    assert app.user_row(con, "lee")["alias"] == "이영희2"           # 파일 내 중복은 마지막 행
+    assert app.user_row(con, "park")["alias"] == ""
+    out = app.export_users_csv(con).decode("utf-8-sig").splitlines()
+    assert out[0] == "id,alias" and "lee,이영희2" in out and "park," in out and "yang," in out
+    # 내려받은 파일을 그대로 다시 올려도 변화 없음(멱등)
+    res2 = app.import_users_csv(con, app.export_users_csv(con))
+    assert res2["added"] == [] and len(res2["updated"]) == 4
+    # 헤더 없는 파일도 됨
+    res3 = app.import_users_csv(con, b"choi,\n")
+    assert res3["added"] == ["choi"]

@@ -22,4 +22,4 @@ def test_seats_inside_crop():
     assert len(seats) == 32
     assert len({s["id"] for s in seats}) == 32
     for s in seats:
-        assert 0 <= s["x"] - app.CROP_X <= 525 and 0 <= s["y"] - app.CROP_Y <= 300
+        assert 0 <= s["x"] - app.CROP_X <= 560 and 0 <= s["y"] - app.CROP_Y <= 330

@@ -14,7 +14,7 @@ TZ = ZoneInfo("Asia/Seoul")
 DB_PATH = Path(os.environ.get("SEAT_DB", ROOT / "data" / "seats.db"))
 USERS_PATH = ROOT / "users.json"
 SEATS_PATH = ROOT / "seats.json"
-CROP_X, CROP_Y = 20, 20  # floor.png는 1.png를 (20,20)에서 크롭한 것
+CROP_X, CROP_Y = 0, 0  # floor.png는 1.png의 (0,0)-(560,330) 크롭
 _LOCK = threading.Lock()
 
 
@@ -97,7 +97,7 @@ def seat_map_svg(seats, taken, me) -> str:
     import base64
 
     img = base64.b64encode((ROOT / "floor.png").read_bytes()).decode()
-    w, h = 525, 300
+    w, h = 560, 330
     circles = []
     for s in seats:
         x, y = s["x"] - CROP_X, s["y"] - CROP_Y
@@ -160,7 +160,7 @@ def main():
             cancel(con, me)
             st.rerun()
 
-    components.html(seat_map_svg(seats, taken, me), height=340, scrolling=False)
+    components.html(seat_map_svg(seats, taken, me), height=360, scrolling=False)
 
     st.markdown("#### 자리 선택")
     zones: dict[str, list] = {}

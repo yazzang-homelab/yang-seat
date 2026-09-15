@@ -26,7 +26,7 @@ function render(a){
         <title>${s.id} · ${s.zone} · ${o||"빈 자리 — 클릭하면 선점"}</title></g>`;
   }
   document.getElementById("root").innerHTML=
-   `<svg viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg"><image href="data:image/png;base64,${img}" width="${w}" height="${h}"/>${g}</svg>
+   `<svg style="max-width:${w}px" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg"><image href="data:image/png;base64,${img}" width="${w}" height="${h}"/>${g}</svg>
     <div class="legend"><span style="color:#22a7e0">■</span><span style="color:#7dc855">■</span><span style="color:#f2b722">■</span><span style="color:#6a3ba8">■</span> 빈 자리(클릭하면 선점) &nbsp;<span style="color:#9ca3af">■</span> 선점됨 &nbsp;<span style="color:#2563eb">■</span> 내 자리(클릭하면 취소)</div>`;
   document.querySelectorAll(".seat").forEach(el=>el.onclick=()=>{
     const id=el.dataset.id, o=taken[id];

@@ -264,12 +264,10 @@ def delete_user(con, uid: str) -> None:
         snapshot(con)
 
 
-@st.cache_data
 def load_layout() -> dict:
     return json.loads(SEATS_PATH.read_text(encoding="utf-8"))
 
 
-@st.cache_data
 def floor_b64() -> str:
     return base64.b64encode((ROOT / "floor.png").read_bytes()).decode()
 

@@ -2,20 +2,45 @@ import os, tempfile, json, pathlib
 os.environ["SEAT_DB"] = os.path.join(tempfile.mkdtemp(), "t.db")
 import app
 
+
+def fresh():
+    app.db.clear()
+    os.environ["SEAT_DB"] = os.path.join(tempfile.mkdtemp(), "t.db")
+    app.DB_PATH = pathlib.Path(os.environ["SEAT_DB"])
+    return app.db()
+
+
 def test_reserve_and_conflict():
-    con = app.db()
+    con = fresh()
     assert app.reserve(con, "L01", "a") is None
     assert "이미" in app.reserve(con, "L01", "b")
     assert "다른 자리" in app.reserve(con, "L02", "a")
     app.cancel(con, "a")
     assert app.reserve(con, "L02", "a") is None
 
+
 def test_purge_old_days():
-    con = app.db()
+    con = fresh()
     con.execute("INSERT OR REPLACE INTO reservations VALUES('2000-01-01','L03','x','t')")
-    con.commit()
+    app._purged_for["day"] = None
     app.purge_old_days(con)
     assert con.execute("SELECT COUNT(*) FROM reservations WHERE day='2000-01-01'").fetchone()[0] == 0
+
+
+def test_users_seed_and_admin():
+    con = fresh()
+    assert app.auth(con, "yang", "1234") == {"id": "yang", "admin": True}
+    assert app.auth(con, "yang", "x") is None
+    assert app.auth(con, "nobody", "1234") is None
+    app.upsert_user(con, "kim", "pw1")
+    assert app.auth(con, "kim", "pw1") == {"id": "kim", "admin": False}
+    app.upsert_user(con, "kim", "pw2")  # 비번 변경
+    assert app.auth(con, "kim", "pw1") is None and app.auth(con, "kim", "pw2")
+    app.reserve(con, "L05", "kim")
+    app.delete_user(con, "kim")
+    assert app.auth(con, "kim", "pw2") is None
+    assert "L05" not in app.load_reservations(con)  # 예약도 함께 삭제
+
 
 def test_seats_inside_crop():
     lay = json.loads(pathlib.Path(app.SEATS_PATH).read_text())

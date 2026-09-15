@@ -444,10 +444,8 @@ def board(con, me, seats, w, h):
         st.info(f"색 칸을 클릭하면 바로 선점됩니다. ({msg})")
 
     names = display_names(con)
-    clicked = seat_map(
-        img=floor_b64(), w=w, h=h, seats=seats,
-        taken={s: names.get(u, u) for s, u in taken.items()},  # 화면엔 표시 이름
-        me=names.get(me, me), key="map", default=None,
+    clicked = seat_map(  # 도면 위 칸에는 별칭이 아니라 ID를 표시
+        img=floor_b64(), w=w, h=h, seats=seats, taken=taken, me=me, key="map", default=None
     )
     if clicked and clicked.get("nonce") != st.session_state.get("last_nonce"):
         st.session_state.last_nonce = clicked["nonce"]

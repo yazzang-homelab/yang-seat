@@ -45,6 +45,10 @@ def db() -> sqlite3.Connection:
              id TEXT PRIMARY KEY, pw TEXT NOT NULL, admin INTEGER NOT NULL DEFAULT 0,
              alias TEXT NOT NULL DEFAULT '')"""
     )
+    # 구버전 DB(alias 컬럼 없음) 마이그레이션
+    cols = {r[1] for r in con.execute("PRAGMA table_info(users)")}
+    if "alias" not in cols:
+        con.execute("ALTER TABLE users ADD COLUMN alias TEXT NOT NULL DEFAULT ''")
     restore(con)
     return con
 

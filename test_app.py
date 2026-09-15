@@ -54,3 +54,18 @@ def test_seats_inside_crop():
     assert len(lay["seats"]) == 32 and len({s["id"] for s in lay["seats"]}) == 32
     for s in lay["seats"]:
         assert x0 + 11 <= s["x"] <= x1 - 11 and y0 + 11 <= s["y"] <= y1 - 11
+
+
+def test_migrates_old_users_table():
+    import sqlite3
+    app.db.clear()
+    os.environ["SEAT_DB"] = os.path.join(tempfile.mkdtemp(), "old.db")
+    app.DB_PATH = pathlib.Path(os.environ["SEAT_DB"])
+    old = sqlite3.connect(app.DB_PATH)
+    old.execute("CREATE TABLE users(id TEXT PRIMARY KEY, pw TEXT NOT NULL, admin INTEGER NOT NULL DEFAULT 0)")
+    old.execute("INSERT INTO users VALUES('yang','1234',1)")
+    old.commit(); old.close()
+    con = app.db()
+    assert app.auth(con, "yang", "1234") == {"id": "yang", "admin": True, "name": "yang"}
+    app.upsert_user(con, "yang", "1234", True, "양")
+    assert app.auth(con, "yang", "1234")["name"] == "양"

@@ -11,9 +11,9 @@ function render(a){
   let g="";
   for(const s of seats){
     const o=taken[s.id]; let fill,label,cls="seat";
-    if(o===me){fill="#2563eb";label="나"}else if(o){fill="#9ca3af";label=o.slice(0,3);cls="seat taken"}else{fill="#22c55e";label=s.id}
+    if(o===me){fill="#2563eb";label="나"}else if(o){fill="#9ca3af";label=o.length>3?o.slice(0,3)+"…":o;cls="seat taken"}else{fill="#22c55e";label=s.id}
     g+=`<g class="${cls}" data-id="${s.id}" data-taken="${o?1:0}"><circle cx="${s.x}" cy="${s.y}" r="11" fill="${fill}" stroke="#111" stroke-width="1"/>
-        <text x="${s.x}" y="${s.y+3}" font-size="7" text-anchor="middle" fill="#fff" font-weight="bold">${label}</text>
+        <text x="${s.x}" y="${s.y+3}" font-size="${/[가-힣]/.test(label)?6:7}" text-anchor="middle" fill="#fff" font-weight="bold">${label}</text>
         <title>${s.id} · ${s.zone} · ${o||"빈 자리 — 클릭하면 선점"}</title></g>`;
   }
   document.getElementById("root").innerHTML=

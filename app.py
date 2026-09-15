@@ -42,7 +42,8 @@ def db() -> sqlite3.Connection:
     )
     con.execute(
         """CREATE TABLE IF NOT EXISTS users(
-             id TEXT PRIMARY KEY, pw TEXT NOT NULL, admin INTEGER NOT NULL DEFAULT 0)"""
+             id TEXT PRIMARY KEY, pw TEXT NOT NULL, admin INTEGER NOT NULL DEFAULT 0,
+             alias TEXT NOT NULL DEFAULT '')"""
     )
     restore(con)
     return con
@@ -57,8 +58,11 @@ def restore(con: sqlite3.Connection) -> None:
         print("gist load failed:", e)
     if snap:
         con.executemany(
-            "INSERT OR REPLACE INTO users VALUES(?,?,?)",
-            [(u, v["pw"], int(v.get("admin", False))) for u, v in snap["users"].items()],
+            "INSERT OR REPLACE INTO users VALUES(?,?,?,?)",
+            [
+                (u, v["pw"], int(v.get("admin", False)), v.get("alias", ""))
+                for u, v in snap["users"].items()
+            ],
         )
         con.executemany(
             "INSERT OR IGNORE INTO reservations VALUES(?,?,?,?)",
@@ -66,15 +70,21 @@ def restore(con: sqlite3.Connection) -> None:
         )
     if con.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
         con.executemany(
-            "INSERT INTO users VALUES(?,?,?)",
-            [(u, v["pw"], int(v["admin"])) for u, v in store.bootstrap_users(USERS_PATH).items()],
+            "INSERT INTO users VALUES(?,?,?,?)",
+            [
+                (u, v["pw"], int(v["admin"]), v.get("alias", ""))
+                for u, v in store.bootstrap_users(USERS_PATH).items()
+            ],
         )
     purge_old_days(con)
 
 
 def snapshot(con: sqlite3.Connection) -> None:
     state = {
-        "users": {u: {"pw": p, "admin": bool(a)} for u, p, a in con.execute("SELECT * FROM users")},
+        "users": {
+            u: {"pw": p, "admin": bool(a), "alias": al}
+            for u, p, a, al in con.execute("SELECT id, pw, admin, alias FROM users")
+        },
         "reservations": [
             dict(zip(("day", "seat", "user", "created_at"), r))
             for r in con.execute("SELECT * FROM reservations")
@@ -100,8 +110,18 @@ def purge_old_days(con: sqlite3.Connection) -> None:
 
 
 def load_reservations(con) -> dict[str, str]:
+    """{seat: user_id}"""
     rows = con.execute("SELECT seat, user FROM reservations WHERE day=?", (today(),)).fetchall()
     return dict(rows)
+
+
+def display_names(con) -> dict[str, str]:
+    """{user_id: 표시 이름} — 별칭이 있으면 별칭, 없으면 id."""
+    return {u: (al or u) for u, al in con.execute("SELECT id, alias FROM users")}
+
+
+def shown(con, uid: str) -> str:
+    return display_names(con).get(uid, uid)
 
 
 def reserve(con, seat: str, user: str) -> str | None:
@@ -115,7 +135,7 @@ def reserve(con, seat: str, user: str) -> str | None:
         except sqlite3.IntegrityError:
             taken = load_reservations(con)
             if seat in taken:
-                return f"{seat}은(는) 이미 {taken[seat]}님이 선점했습니다."
+                return f"{seat}은(는) 이미 {shown(con, taken[seat])}님이 선점했습니다."
             return "이미 다른 자리를 선점했습니다. 내 자리를 클릭해 먼저 취소하세요."
         snapshot(con)
     return None
@@ -129,22 +149,24 @@ def cancel(con, user: str) -> None:
 
 # --- users ---
 def auth(con, uid: str, pw: str) -> dict | None:
-    row = con.execute("SELECT id, pw, admin FROM users WHERE id=?", (uid,)).fetchone()
+    row = con.execute("SELECT id, pw, admin, alias FROM users WHERE id=?", (uid,)).fetchone()
     if row and row[1] == pw:
-        return {"id": row[0], "admin": bool(row[2])}
+        return {"id": row[0], "admin": bool(row[2]), "name": row[3] or row[0]}
     return None
 
 
 def list_users(con) -> list[dict]:
     return [
-        {"id": u, "pw": p, "admin": bool(a)}
-        for u, p, a in con.execute("SELECT * FROM users ORDER BY admin DESC, id")
+        {"id": u, "pw": p, "admin": bool(a), "alias": al}
+        for u, p, a, al in con.execute("SELECT id, pw, admin, alias FROM users ORDER BY admin DESC, id")
     ]
 
 
-def upsert_user(con, uid: str, pw: str, admin: bool = False) -> None:
+def upsert_user(con, uid: str, pw: str, admin: bool = False, alias: str = "") -> None:
     with _LOCK:
-        con.execute("INSERT OR REPLACE INTO users VALUES(?,?,?)", (uid, pw, int(admin)))
+        con.execute(
+            "INSERT OR REPLACE INTO users VALUES(?,?,?,?)", (uid, pw, int(admin), alias.strip())
+        )
         snapshot(con)
 
 
@@ -206,18 +228,20 @@ def admin_page(con, me: dict):
     if st.button("← 자리 선점 화면"):
         goto("seat")
 
-    st.markdown("#### 계정 추가 / 비밀번호 변경")
+    st.markdown("#### 계정 추가 / 수정")
+    st.caption("같은 ID로 저장하면 PW·별칭·관리자 여부가 덮어써집니다. 별칭이 있으면 화면에 ID 대신 별칭이 보입니다.")
     with st.form("add", clear_on_submit=True):
-        c = st.columns([2, 2, 1])
+        c = st.columns([2, 2, 2, 1])
         uid = c[0].text_input("ID")
         pw = c[1].text_input("PW")
-        adm = c[2].checkbox("관리자")
+        alias = c[2].text_input("별칭 (선택)", placeholder="예: 김철수")
+        adm = c[3].checkbox("관리자")
         if st.form_submit_button("저장", use_container_width=True):
             uid = uid.strip()
             if not uid or not pw:
                 st.error("ID와 PW를 모두 입력하세요.")
             else:
-                upsert_user(con, uid, pw, adm)
+                upsert_user(con, uid, pw, adm, alias)
                 st.success(f"{uid} 저장됨")
                 st.rerun()
 
@@ -226,7 +250,8 @@ def admin_page(con, me: dict):
     st.caption(f"{len(users)}명 · 삭제하면 그 사용자의 오늘 예약도 함께 삭제됩니다.")
     for u in users:
         c = st.columns([2, 2, 1, 1])
-        c[0].write(f"**{u['id']}**" + (" 👑" if u["admin"] else ""))
+        label = f"**{u['alias']}** ({u['id']})" if u["alias"] else f"**{u['id']}**"
+        c[0].write(label + (" 👑" if u["admin"] else ""))
         c[1].code(u["pw"], language=None)
         if u["id"] == me["id"]:
             c[3].button("본인", key=f"d-{u['id']}", disabled=True, use_container_width=True)
@@ -236,12 +261,13 @@ def admin_page(con, me: dict):
 
     with st.expander("오늘 선점 현황 / 강제 해제"):
         taken = load_reservations(con)
+        names = display_names(con)
         if not taken:
             st.write("아직 선점된 자리가 없습니다.")
         for seat, user in sorted(taken.items()):
             c = st.columns([1, 2, 1])
             c[0].write(seat)
-            c[1].write(user)
+            c[1].write(names.get(user, user) if names.get(user, user) == user else f"{names[user]} ({user})")
             if c[2].button("해제", key=f"r-{seat}", use_container_width=True):
                 cancel(con, user)
                 st.rerun()
@@ -258,7 +284,7 @@ def seat_page(con, me: dict):
     seats = layout["seats"]
     w, h = layout["crop"][2] - layout["crop"][0], layout["crop"][3] - layout["crop"][1]
     top = st.columns([3, 1])
-    top[0].markdown(f"### {today()} · {me['id']}님")
+    top[0].markdown(f"### {today()} · {me['name']}님")
     if top[1].button("로그아웃", use_container_width=True):
         st.session_state.clear()
         st.rerun()
@@ -277,8 +303,11 @@ def board(con, me, seats, w, h):
     else:
         st.info(f"초록 원을 클릭하면 바로 선점됩니다. ({msg})")
 
+    names = display_names(con)
     clicked = seat_map(
-        img=floor_b64(), w=w, h=h, seats=seats, taken=taken, me=me, key="map", default=None
+        img=floor_b64(), w=w, h=h, seats=seats,
+        taken={s: names.get(u, u) for s, u in taken.items()},  # 화면엔 표시 이름
+        me=names.get(me, me), key="map", default=None,
     )
     if clicked and clicked.get("nonce") != st.session_state.get("last_nonce"):
         st.session_state.last_nonce = clicked["nonce"]
@@ -297,7 +326,7 @@ def board(con, me, seats, w, h):
 
     with st.expander("오늘 선점 현황"):
         if taken:
-            st.table([{"자리": k, "사용자": v} for k, v in sorted(taken.items())])
+            st.table([{"자리": k, "사용자": names.get(v, v)} for k, v in sorted(taken.items())])
         else:
             st.write("아직 선점된 자리가 없습니다.")
 

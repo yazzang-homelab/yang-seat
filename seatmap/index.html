@@ -13,15 +13,16 @@ function render(a){
   for(const s of seats){
     const o=taken[s.id]; let fill,label,cls="seat",txt="#fff";
     const hw=(s.w||44)/2, hh=(s.h||40)/2;
-    if(o===me){fill="#2563eb";label="내 자리"}
+    if(o===me){fill="#2563eb";label="나"}
     else if(o){fill="#9ca3af";label=o;cls="seat taken"}
     else{fill=ZONE[s.zone]||"#22c55e";label=s.id;txt=s.zone==="CSO"?"#333":"#fff"}
     // 라벨은 잘라내지 않고 칸 폭에 맞춰 축소한다 (textLength로 폭 고정)
-    const maxW=hw*2-6, est=label.length*(/[가-힣]/.test(label)?9:6.5);
+    const maxW=hw*2-3, est=label.length*(/[가-힣]/.test(label)?7:5);
     const fit=est>maxW?`textLength="${maxW}" lengthAdjust="spacingAndGlyphs"`:"";
     g+=`<g class="${cls}" data-id="${s.id}" data-taken="${o?1:0}">
-        <rect x="${s.x-hw}" y="${s.y-hh}" width="${hw*2}" height="${hh*2}" rx="3" fill="${fill}" stroke="#1f2937" stroke-width="1"/>
-        <text x="${s.x}" y="${s.y+3.5}" font-size="10" text-anchor="middle" fill="${txt}" font-weight="bold" ${fit}>${label}</text>
+        <rect x="${s.x-23}" y="${s.y-21}" width="46" height="42" fill="transparent"/>
+        <rect x="${s.x-hw}" y="${s.y-hh}" width="${hw*2}" height="${hh*2}" rx="2" fill="${fill}" stroke="#1f2937" stroke-width="0.8"/>
+        <text x="${s.x}" y="${s.y+2.5}" font-size="7" text-anchor="middle" fill="${txt}" font-weight="bold" ${fit}>${label}</text>
         <title>${s.id} · ${s.zone} · ${o||"빈 자리 — 클릭하면 선점"}</title></g>`;
   }
   document.getElementById("root").innerHTML=

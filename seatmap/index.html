@@ -17,7 +17,7 @@ function render(a){
     else if(o){fill="#9ca3af";label=o.length>4?o.slice(0,4)+"…":o;cls="seat taken"}
     else{fill=ZONE[s.zone]||"#22c55e";label=s.id;txt=s.zone==="CSO"?"#333":"#fff"}
     g+=`<g class="${cls}" data-id="${s.id}" data-taken="${o?1:0}">
-        <rect x="${s.x-hw}" y="${s.y-hh}" width="${hw*2}" height="${hh*2}" rx="4" fill="${fill}" stroke="#1f2937" stroke-width="1.5"/>
+        <rect x="${s.x-hw}" y="${s.y-hh}" width="${hw*2}" height="${hh*2}" rx="3" fill="${fill}" stroke="#1f2937" stroke-width="1"/>
         <text x="${s.x}" y="${s.y+4}" font-size="${label.length>4?9:11}" text-anchor="middle" fill="${txt}" font-weight="bold">${label}</text>
         <title>${s.id} · ${s.zone} · ${o||"빈 자리 — 클릭하면 선점"}</title></g>`;
   }

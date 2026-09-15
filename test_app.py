@@ -71,7 +71,7 @@ def test_seats_inside_crop():
     for a in seats:
         for b in seats:
             if a["id"] < b["id"]:
-                assert abs(a["x"] - b["x"]) >= 44 or abs(a["y"] - b["y"]) >= 40, (a["id"], b["id"])
+                assert abs(a["x"] - b["x"]) >= a["w"] + 4 or abs(a["y"] - b["y"]) >= a["h"] + 4, (a["id"], b["id"])
 
 
 def test_migrates_old_users_table():

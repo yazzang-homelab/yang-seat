@@ -152,11 +152,46 @@ def cancel(con, user: str) -> None:
 
 
 # --- users ---
-def auth(con, uid: str, pw: str) -> dict | None:
+def valid_pin(pw: str) -> bool:
+    return len(pw) == 4 and pw.isdigit()
+
+
+def user_row(con, uid: str) -> dict | None:
     row = con.execute("SELECT id, pw, admin, alias FROM users WHERE id=?", (uid,)).fetchone()
-    if row and row[1] == pw:
-        return {"id": row[0], "admin": bool(row[2]), "name": row[3] or row[0]}
+    if not row:
+        return None
+    return {"id": row[0], "pw": row[1], "admin": bool(row[2]), "alias": row[3], "name": row[3] or row[0]}
+
+
+def needs_setup(con, uid: str) -> bool:
+    """등록됐지만 PW가 아직 비어 있는 계정(처음 접속 시 본인이 설정)."""
+    u = user_row(con, uid)
+    return u is not None and u["pw"] == ""
+
+
+def auth(con, uid: str, pw: str) -> dict | None:
+    u = user_row(con, uid)
+    if u and u["pw"] != "" and u["pw"] == pw:
+        return {"id": u["id"], "admin": u["admin"], "name": u["name"]}
     return None
+
+
+def set_pw(con, uid: str, pw: str) -> str | None:
+    """빈 PW 계정에 최초 PW 설정. 이미 설정돼 있으면 거부(관리자가 초기화해야 함)."""
+    if not valid_pin(pw):
+        return "PW는 숫자 4자리여야 합니다."
+    with _LOCK:
+        cur = con.execute("UPDATE users SET pw=? WHERE id=? AND pw=''", (pw, uid))
+        if cur.rowcount == 0:
+            return "이미 PW가 설정된 계정입니다. 관리자에게 초기화를 요청하세요."
+        snapshot(con)
+    return None
+
+
+def reset_pw(con, uid: str) -> None:
+    with _LOCK:
+        con.execute("UPDATE users SET pw='' WHERE id=?", (uid,))
+        snapshot(con)
 
 
 def list_users(con) -> list[dict]:
@@ -166,10 +201,13 @@ def list_users(con) -> list[dict]:
     ]
 
 
-def upsert_user(con, uid: str, pw: str, admin: bool = False, alias: str = "") -> None:
+def upsert_user(con, uid: str, admin: bool = False, alias: str = "") -> None:
+    """계정 등록/수정. PW는 건드리지 않는다 — 신규는 빈 PW(첫 접속 시 본인 설정), 기존은 유지."""
     with _LOCK:
         con.execute(
-            "INSERT OR REPLACE INTO users VALUES(?,?,?,?)", (uid, pw, int(admin), alias.strip())
+            """INSERT INTO users(id, pw, admin, alias) VALUES(?, '', ?, ?)
+               ON CONFLICT(id) DO UPDATE SET admin=excluded.admin, alias=excluded.alias""",
+            (uid, int(admin), alias.strip()),
         )
         snapshot(con)
 
@@ -194,11 +232,37 @@ def floor_b64() -> str:
 # ---------- ui ----------
 def login(con, title: str):
     st.title(title)
+    setup_uid = st.session_state.get("setup_uid")
+    if setup_uid:
+        st.info(f"**{setup_uid}** 계정의 첫 접속입니다. 사용할 PW(숫자 4자리)를 정하세요.")
+        with st.form("setup"):
+            p1 = st.text_input("새 PW (숫자 4자리)", type="password", max_chars=4)
+            p2 = st.text_input("새 PW 확인", type="password", max_chars=4)
+            c = st.columns(2)
+            if c[0].form_submit_button("설정하고 로그인", use_container_width=True, type="primary"):
+                if p1 != p2:
+                    st.error("두 PW가 다릅니다.")
+                else:
+                    err = set_pw(con, setup_uid, p1)
+                    if err:
+                        st.error(err)
+                    else:
+                        del st.session_state.setup_uid
+                        st.session_state.user = auth(con, setup_uid, p1)
+                        st.rerun()
+            if c[1].form_submit_button("취소", use_container_width=True):
+                del st.session_state.setup_uid
+                st.rerun()
+        return
     with st.form("login"):
         uid = st.text_input("ID")
-        pw = st.text_input("PW", type="password")
+        pw = st.text_input("PW (숫자 4자리)", type="password", max_chars=4)
         if st.form_submit_button("로그인", use_container_width=True):
-            u = auth(con, uid.strip(), pw)
+            uid = uid.strip()
+            if needs_setup(con, uid):
+                st.session_state.setup_uid = uid
+                st.rerun()
+            u = auth(con, uid, pw)
             if u:
                 st.session_state.user = u
                 st.rerun()
@@ -233,30 +297,40 @@ def admin_page(con, me: dict):
         goto("seat")
 
     st.markdown("#### 계정 추가 / 수정")
-    st.caption("같은 ID로 저장하면 PW·별칭·관리자 여부가 덮어써집니다. 별칭이 있으면 화면에 ID 대신 별칭이 보입니다.")
+    st.caption(
+        "PW는 관리자가 정하지 않습니다 — 등록된 사용자가 처음 접속할 때 숫자 4자리를 직접 설정합니다. "
+        "같은 ID로 저장하면 별칭·관리자 여부만 바뀌고 PW는 유지됩니다."
+    )
     with st.form("add", clear_on_submit=True):
-        c = st.columns([2, 2, 2, 1])
+        c = st.columns([2, 2, 1])
         uid = c[0].text_input("ID")
-        pw = c[1].text_input("PW")
-        alias = c[2].text_input("별칭 (선택)", placeholder="예: 김철수")
-        adm = c[3].checkbox("관리자")
+        alias = c[1].text_input("별칭 (선택)", placeholder="예: 김철수")
+        adm = c[2].checkbox("관리자")
         if st.form_submit_button("저장", use_container_width=True):
             uid = uid.strip()
-            if not uid or not pw:
-                st.error("ID와 PW를 모두 입력하세요.")
+            if not uid:
+                st.error("ID를 입력하세요.")
             else:
-                upsert_user(con, uid, pw, adm, alias)
+                upsert_user(con, uid, adm, alias)
                 st.success(f"{uid} 저장됨")
                 st.rerun()
 
     st.markdown("#### 계정 목록")
     users = list_users(con)
-    st.caption(f"{len(users)}명 · 삭제하면 그 사용자의 오늘 예약도 함께 삭제됩니다.")
+    st.caption(
+        f"{len(users)}명 · PW 초기화 → 그 사용자가 다음 접속 때 새 PW를 설정합니다. "
+        "삭제하면 오늘 예약도 함께 삭제됩니다."
+    )
     for u in users:
-        c = st.columns([2, 2, 1, 1])
+        c = st.columns([2, 1.5, 1, 1])
         label = f"**{u['alias']}** ({u['id']})" if u["alias"] else f"**{u['id']}**"
         c[0].write(label + (" 👑" if u["admin"] else ""))
-        c[1].code(u["pw"], language=None)
+        c[1].write("🟡 PW 미설정" if u["pw"] == "" else "🟢 PW 설정됨")
+        if c[2].button("PW 초기화", key=f"p-{u['id']}", use_container_width=True):
+            reset_pw(con, u["id"])
+            if u["id"] == me["id"]:  # 본인 초기화면 즉시 로그아웃 → 재설정
+                st.session_state.clear()
+            st.rerun()
         if u["id"] == me["id"]:
             c[3].button("본인", key=f"d-{u['id']}", disabled=True, use_container_width=True)
         elif c[3].button("삭제", key=f"d-{u['id']}", use_container_width=True):

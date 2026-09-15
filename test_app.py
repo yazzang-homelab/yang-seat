@@ -32,20 +32,29 @@ def test_users_seed_and_admin():
     assert app.auth(con, "yang", "1234") == {"id": "yang", "admin": True, "name": "yang"}
     assert app.auth(con, "yang", "x") is None
     assert app.auth(con, "nobody", "1234") is None
-    app.upsert_user(con, "kim", "pw1")
-    assert app.auth(con, "kim", "pw1") == {"id": "kim", "admin": False, "name": "kim"}
-    app.upsert_user(con, "kim", "pw1", alias=" 김철수 ")
-    assert app.auth(con, "kim", "pw1")["name"] == "김철수"
-    assert app.display_names(con) == {"yang": "yang", "kim": "김철수"}
+    # 신규 등록 = 빈 PW → 첫 접속 설정 흐름
+    app.upsert_user(con, "kim", alias=" 김철수 ")
+    assert app.needs_setup(con, "kim") and not app.needs_setup(con, "yang") and not app.needs_setup(con, "ghost")
+    assert app.auth(con, "kim", "") is None  # 빈 PW로 로그인 불가
+    assert "숫자 4자리" in app.set_pw(con, "kim", "12")
+    assert "숫자 4자리" in app.set_pw(con, "kim", "abcd")
+    assert "숫자 4자리" in app.set_pw(con, "kim", "12345")
+    assert app.set_pw(con, "kim", "0420") is None
+    assert app.auth(con, "kim", "0420") == {"id": "kim", "admin": False, "name": "김철수"}
+    assert "이미 PW" in app.set_pw(con, "kim", "9999")  # 재설정은 관리자 초기화 필요
+    # 재저장은 별칭/권한만 갱신, PW 유지
+    app.upsert_user(con, "kim", admin=True, alias="김팀장")
+    assert app.auth(con, "kim", "0420") == {"id": "kim", "admin": True, "name": "김팀장"}
+    # 초기화 → 다시 설정 가능
+    app.reset_pw(con, "kim")
+    assert app.needs_setup(con, "kim") and app.auth(con, "kim", "0420") is None
+    assert app.set_pw(con, "kim", "1111") is None and app.auth(con, "kim", "1111")
+    assert app.display_names(con) == {"yang": "yang", "kim": "김팀장"}
     app.reserve(con, "L09", "kim")
-    assert "김철수님이 선점" in app.reserve(con, "L09", "yang")
-    app.cancel(con, "kim")
-    app.upsert_user(con, "kim", "pw2")  # 비번 변경
-    assert app.auth(con, "kim", "pw1") is None and app.auth(con, "kim", "pw2")
-    app.reserve(con, "L05", "kim")
+    assert "김팀장님이 선점" in app.reserve(con, "L09", "yang")
     app.delete_user(con, "kim")
-    assert app.auth(con, "kim", "pw2") is None
-    assert "L05" not in app.load_reservations(con)  # 예약도 함께 삭제
+    assert app.user_row(con, "kim") is None
+    assert "L09" not in app.load_reservations(con)
 
 
 def test_seats_inside_crop():
@@ -67,5 +76,5 @@ def test_migrates_old_users_table():
     old.commit(); old.close()
     con = app.db()
     assert app.auth(con, "yang", "1234") == {"id": "yang", "admin": True, "name": "yang"}
-    app.upsert_user(con, "yang", "1234", True, "양")
-    assert app.auth(con, "yang", "1234")["name"] == "양"
+    app.upsert_user(con, "yang", True, "양")
+    assert app.auth(con, "yang", "1234")["name"] == "양"  # PW 유지

@@ -15,10 +15,11 @@ docker build -t yang-seat . && docker run -d -p 8501:8501 -v seatdata:/app/data 
 
 | 파일 | 역할 |
 |---|---|
-| `app.py` | 앱 전체 (로그인·좌석 맵 SVG·선점/취소·SQLite) |
+| `app.py` | 앱 전체 (로그인·클릭형 좌석 맵·선점/취소·SQLite) |
 | `seats.json` | 좌석 32개 좌표 (도면 의자 위치에 맞춰 정렬; L=LSS 13, S=SCC 6, C=CSO 13) |
+| `seatmap/index.html` | 커스텀 컴포넌트 — 도면 위 원을 클릭하면 선점, 내 자리를 클릭하면 취소 |
 | `users.json` | `{ "id": "pw" }` 계정 목록 — 여기만 고치면 사용자 추가 |
-| `floor.png` | 1.png 좌상단 (0,0)-(560,330) 크롭 — 상단 벽까지 포함 |
+| `floor.png` | 1.png (0,0)-(560,330) 크롭 + 상단 14px 여백 |
 | `data/seats.db` | 예약 DB (자동 생성, gitignore) |
 
 ## 초기화 방식

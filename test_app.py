@@ -5,8 +5,8 @@ import app
 def test_reserve_and_conflict():
     con = app.db()
     assert app.reserve(con, "L01", "a") is None
-    assert "이미" in app.reserve(con, "L01", "b")      # 같은 자리
-    assert "다른 자리" in app.reserve(con, "L02", "a")  # 1인 1좌석
+    assert "이미" in app.reserve(con, "L01", "b")
+    assert "다른 자리" in app.reserve(con, "L02", "a")
     app.cancel(con, "a")
     assert app.reserve(con, "L02", "a") is None
 
@@ -18,8 +18,8 @@ def test_purge_old_days():
     assert con.execute("SELECT COUNT(*) FROM reservations WHERE day='2000-01-01'").fetchone()[0] == 0
 
 def test_seats_inside_crop():
-    seats = json.loads(pathlib.Path(app.SEATS_PATH).read_text())["seats"]
-    assert len(seats) == 32
-    assert len({s["id"] for s in seats}) == 32
-    for s in seats:
-        assert 0 <= s["x"] - app.CROP_X <= 560 and 0 <= s["y"] - app.CROP_Y <= 330
+    lay = json.loads(pathlib.Path(app.SEATS_PATH).read_text())
+    x0, y0, x1, y1 = lay["crop"]
+    assert len(lay["seats"]) == 32 and len({s["id"] for s in lay["seats"]}) == 32
+    for s in lay["seats"]:
+        assert x0 + 11 <= s["x"] <= x1 - 11 and y0 + 11 <= s["y"] <= y1 - 11

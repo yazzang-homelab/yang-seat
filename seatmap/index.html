@@ -1,0 +1,32 @@
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>body{margin:0;padding:0 2px 4px 0;font-family:sans-serif;box-sizing:border-box}svg{width:calc(100% - 2px);height:auto;display:block;border:1px solid #ddd;border-radius:8px;background:#fff}
+.seat{cursor:pointer}.seat:hover circle{stroke-width:2.5}.taken{cursor:not-allowed}
+.legend{font-size:12px;color:#444;margin-top:4px}</style></head><body>
+<div id="root"></div>
+<script>
+function send(type,data){window.parent.postMessage(Object.assign({isStreamlitMessage:true,type:type},data),"*")}
+function setHeight(){send("streamlit:setFrameHeight",{height:document.body.scrollHeight+8})}
+function render(a){
+  const {img,w,h,seats,taken,me}=a;
+  let g="";
+  for(const s of seats){
+    const o=taken[s.id]; let fill,label,cls="seat";
+    if(o===me){fill="#2563eb";label="나"}else if(o){fill="#9ca3af";label=o.slice(0,3);cls="seat taken"}else{fill="#22c55e";label=s.id}
+    g+=`<g class="${cls}" data-id="${s.id}" data-taken="${o?1:0}"><circle cx="${s.x}" cy="${s.y}" r="11" fill="${fill}" stroke="#111" stroke-width="1"/>
+        <text x="${s.x}" y="${s.y+3}" font-size="7" text-anchor="middle" fill="#fff" font-weight="bold">${label}</text>
+        <title>${s.id} · ${s.zone} · ${o||"빈 자리 — 클릭하면 선점"}</title></g>`;
+  }
+  document.getElementById("root").innerHTML=
+   `<svg viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg"><image href="data:image/png;base64,${img}" width="${w}" height="${h}"/>${g}</svg>
+    <div class="legend"><span style="color:#22c55e">●</span> 빈 자리(클릭하면 선점) &nbsp;<span style="color:#9ca3af">●</span> 선점됨 &nbsp;<span style="color:#2563eb">●</span> 내 자리(클릭하면 취소)</div>`;
+  document.querySelectorAll(".seat").forEach(el=>el.onclick=()=>{
+    const id=el.dataset.id, o=taken[id];
+    if(o && o!==me) return;
+    send("streamlit:setComponentValue",{value:{seat:id,nonce:Date.now()},dataType:"json"});
+  });
+  setHeight();
+}
+window.addEventListener("message",e=>{if(e.data.type==="streamlit:render")render(e.data.args)});
+window.addEventListener("resize",setHeight);
+send("streamlit:componentReady",{apiVersion:1});
+</script></body></html>

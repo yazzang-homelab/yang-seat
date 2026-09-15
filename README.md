@@ -6,7 +6,7 @@ Streamlit 앱. 로그인 → 도면 위 원을 클릭해 그날 자리를 선점
 ## 배포 (Streamlit Community Cloud — 외부 호스팅, LTE 접속용)
 
 1. 이 저장소를 GitHub에 올린다 (이미: `yazzang-homelab/yang-seat`).
-2. https://share.streamlit.io → **New app** → 저장소·브랜치 `main`·파일 `app.py` 선택.
+2. https://share.streamlit.io → **New app** → 저장소·브랜치 `master`·파일 `app.py` 선택.
 3. **Advanced settings → Secrets** 에 아래를 넣는다 (영속화 — 없으면 재배포 때 추가한 계정이 사라진다):
    ```toml
    GIST_ID = "459980d5c7889565b1c9273b4ab7afd7"
